@@ -1,15 +1,11 @@
+import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import { db } from '@/lib/db'
-import {
-  fmtTime,
-  diffMin,
-  ageFromDob,
-  DISPOSITION_LABELS,
-  CODE_SYSTEM_LABELS,
-} from '@/lib/fmt'
-import { StatusBadge, DeptBadge, NoteStatusBadge } from '@/components/encounters/badges'
+import { fmtTime, diffMin, ageFromDob, DISPOSITION_LABELS } from '@/lib/fmt'
+import { StatusBadge, DeptBadge } from '@/components/encounters/badges'
+import NoteReview from '@/components/encounters/note-review'
 
 // ---------------------------------------------------------------------------
 // Metadata
@@ -34,37 +30,39 @@ export async function generateMetadata({ params }: Props) {
 export default async function EncounterDetailPage({ params }: Props) {
   const { id } = await params
 
-  const enc = await db.encounter.findUnique({
-    where: { id },
-    include: {
-      patient:  true,
-      clinician: { select: { name: true, role: true } },
-      note: {
-        include: {
-          codes: { orderBy: { confidence: 'desc' } },
+  const [enc, cookieStore] = await Promise.all([
+    db.encounter.findUnique({
+      where: { id },
+      include: {
+        patient:   true,
+        clinician: { select: { name: true, role: true } },
+        note: {
+          include: { codes: { orderBy: { confidence: 'desc' } } },
+        },
+        transcript:  { select: { durationSec: true } },
+        ehrSyncLogs: {
+          select:  { latencyMs: true, success: true, createdAt: true },
+          orderBy: { createdAt: 'desc' },
+          take: 1,
         },
       },
-      transcript: { select: { durationSec: true } },
-      ehrSyncLogs: {
-        select: { latencyMs: true, success: true, createdAt: true },
-        orderBy: { createdAt: 'desc' },
-        take: 1,
-      },
-    },
-  })
+    }),
+    cookies(),
+  ])
 
   if (!enc) notFound()
 
-  const age     = ageFromDob(enc.patient.dob)
-  const syncLog = enc.ehrSyncLogs[0] ?? null
-  const dob     = enc.patient.dob.toLocaleDateString('en-US', {
+  const age      = ageFromDob(enc.patient.dob)
+  const syncLog  = enc.ehrSyncLogs[0] ?? null
+  const dob      = enc.patient.dob.toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
+  const clinicianId = cookieStore.get('activeUserId')?.value ?? null
 
   return (
     <div className="mx-auto max-w-4xl p-8">
 
-      {/* ── Back link + status ─────────────────────────────────────── */}
+      {/* ── Back link + encounter status ──────────────────────────── */}
       <div className="mb-6 flex items-center justify-between">
         <Link
           href="/encounters"
@@ -95,7 +93,7 @@ export default async function EncounterDetailPage({ params }: Props) {
       {/* ── Info grid ──────────────────────────────────────────────── */}
       <div className="mb-6 grid grid-cols-1 gap-6 md:grid-cols-2">
 
-        {/* Encounter details card */}
+        {/* Encounter details */}
         <div className="rounded-xl border border-slate-100 bg-white p-6">
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Encounter
@@ -126,14 +124,13 @@ export default async function EncounterDetailPage({ params }: Props) {
             )}
           </dl>
 
-          {/* Ordered labs */}
           {enc.orderedLabs.length > 0 && (
             <div className="mt-5">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
                 Ordered labs
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {enc.orderedLabs.map(lab => (
+                {enc.orderedLabs.map((lab) => (
                   <span
                     key={lab}
                     className="rounded-md bg-slate-50 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200"
@@ -145,14 +142,13 @@ export default async function EncounterDetailPage({ params }: Props) {
             </div>
           )}
 
-          {/* Ordered imaging */}
           {enc.orderedImaging.length > 0 && (
             <div className="mt-4">
               <p className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
                 Ordered imaging
               </p>
               <div className="flex flex-wrap gap-1.5">
-                {enc.orderedImaging.map(img => (
+                {enc.orderedImaging.map((img) => (
                   <span
                     key={img}
                     className="rounded-md bg-slate-50 px-2 py-0.5 text-xs text-slate-600 ring-1 ring-inset ring-slate-200"
@@ -165,7 +161,7 @@ export default async function EncounterDetailPage({ params }: Props) {
           )}
         </div>
 
-        {/* Timeline card */}
+        {/* Timeline */}
         <div className="rounded-xl border border-slate-100 bg-white p-6">
           <h2 className="mb-4 text-xs font-semibold uppercase tracking-wider text-slate-400">
             Timeline
@@ -205,106 +201,50 @@ export default async function EncounterDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {/* ── Clinical note ──────────────────────────────────────────── */}
-      <div className="rounded-xl border border-slate-100 bg-white">
-        {/* Note header */}
-        <div className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
-          <h2 className="text-sm font-semibold text-slate-900">Clinical note</h2>
-
-          {enc.note && (
-            <div className="flex items-center gap-3 text-xs text-slate-400">
-              {enc.note.aiModel && <span>{enc.note.aiModel}</span>}
-              {enc.note.generationMs != null && (
-                <span>{(enc.note.generationMs / 1000).toFixed(1)} s generation</span>
-              )}
-              <NoteStatusBadge status={enc.note.status} />
-            </div>
-          )}
-        </div>
-
-        {enc.note ? (
-          <div className="p-6">
-            {/* SOAP sections */}
-            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <SoapSection title="Subjective" body={enc.note.subjective} />
-              <SoapSection title="Objective"  body={enc.note.objective}  />
-              <SoapSection title="Assessment" body={enc.note.assessment} />
-              <SoapSection title="Plan"       body={enc.note.plan}       />
-            </div>
-
-            {/* Billing codes */}
-            {enc.note.codes.length > 0 && (
-              <div className="mt-8">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Billing codes
-                </h3>
-                <div className="overflow-hidden rounded-lg border border-slate-100">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="border-b border-slate-100 bg-slate-50/70">
-                        <th className="px-3 py-2 text-left font-semibold text-slate-400">System</th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-400">Code</th>
-                        <th className="px-3 py-2 text-left font-semibold text-slate-400">Description</th>
-                        <th className="px-3 py-2 text-right font-semibold text-slate-400">Conf.</th>
-                        <th className="px-3 py-2 text-center font-semibold text-slate-400">Accepted</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {enc.note.codes.map(c => (
-                        <tr key={c.id} className="border-b border-slate-100 last:border-0">
-                          <td className="px-3 py-2 text-slate-500">
-                            {CODE_SYSTEM_LABELS[c.system] ?? c.system}
-                          </td>
-                          <td
-                            className={[
-                              'px-3 py-2 font-mono',
-                              c.accepted ? 'text-slate-800' : 'text-slate-400 line-through',
-                            ].join(' ')}
-                          >
-                            {c.code}
-                          </td>
-                          <td
-                            className={[
-                              'px-3 py-2',
-                              c.accepted ? 'text-slate-700' : 'text-slate-400',
-                            ].join(' ')}
-                          >
-                            {c.description}
-                          </td>
-                          <td className="px-3 py-2 text-right tabular-nums text-slate-500">
-                            {Math.round(c.confidence * 100)}%
-                          </td>
-                          <td className="px-3 py-2 text-center">
-                            {c.accepted ? (
-                              <span className="text-green-600">✓</span>
-                            ) : (
-                              <span className="text-slate-400">✗</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
+      {/* ── Clinical note ───────────────────────────────────────────── */}
+      {enc.note ? (
+        <NoteReview
+          note={{
+            id:           enc.note.id,
+            status:       enc.note.status,
+            subjective:   enc.note.subjective,
+            objective:    enc.note.objective,
+            assessment:   enc.note.assessment,
+            plan:         enc.note.plan,
+            aiModel:      enc.note.aiModel,
+            generationMs: enc.note.generationMs,
+            signedAt:     enc.note.signedAt?.toISOString() ?? null,
+            codes: enc.note.codes.map((c) => ({
+              id:          c.id,
+              system:      c.system,
+              code:        c.code,
+              description: c.description,
+              confidence:  c.confidence,
+              accepted:    c.accepted,
+            })),
+          }}
+          encounterId={enc.id}
+          clinicianId={clinicianId}
+        />
+      ) : (
+        <div className="rounded-xl border border-slate-100 bg-white">
+          <div className="border-b border-slate-100 px-6 py-4">
+            <h2 className="text-sm font-semibold text-slate-900">Clinical note</h2>
           </div>
-        ) : (
-          /* No note yet */
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <p className="text-sm font-medium text-slate-700">No clinical note yet</p>
             <p className="mt-1 max-w-xs text-xs text-slate-400">
-              A note will be generated once the encounter moves to the Awaiting Review stage.
+              A note will appear here once the encounter moves to the Awaiting Review stage.
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Small layout helpers (private to this file)
+// Layout helpers
 // ---------------------------------------------------------------------------
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
@@ -331,21 +271,8 @@ function TimelineItem({
       <div className="flex-1 text-slate-700">{label}</div>
       <div className="text-right">
         <span className="tabular-nums text-slate-500">{time}</span>
-        {note && (
-          <span className="ml-2 text-slate-400">· {note}</span>
-        )}
+        {note && <span className="ml-2 text-slate-400">· {note}</span>}
       </div>
     </li>
-  )
-}
-
-function SoapSection({ title, body }: { title: string; body: string }) {
-  return (
-    <div>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">
-        {title}
-      </h3>
-      <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{body}</p>
-    </div>
   )
 }

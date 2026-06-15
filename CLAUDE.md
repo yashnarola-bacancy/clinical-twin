@@ -24,6 +24,14 @@ Solo-dev demo (NOT production healthcare software). Two modules:
 - A note must be SIGNED before encounter metadata feeds the simulation or EHR sync.
 - ICD-10/CPT suggestions always carry a confidence score; clinician can reject each.
 
+## Local development without API keys
+
+Set `MOCK_AI=true` in `.env` to bypass all external AI calls:
+- `generateNote()` returns a hardcoded sinusitis SOAP note (2 ICD-10 + 1 CPT code) after a 1-second simulated delay.
+- `transcribeAudio()` returns a canned clinician-patient transcript after ~800 ms.
+
+This lets the full UI flow run locally without `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`. Remove or set `MOCK_AI=false` when you're ready to use real API keys.
+
 ## Style
 - Zod schemas for every external boundary (API input, Claude output, form data).
 - Small components; colocate per feature in src/components/{encounters,twin,ui}.
