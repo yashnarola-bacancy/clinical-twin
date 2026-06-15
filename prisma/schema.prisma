@@ -1,13 +1,161 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider = "prisma-client-js"
 }
 
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CLINICIAN
+  OPS_DIRECTOR
+  CMIO
+}
+
+enum EncounterStatus {
+  CHECKED_IN
+  IN_EXAM
+  AWAITING_REVIEW   // note drafted, not signed
+  SIGNED
+  SYNCED            // pushed to (mock) EHR
+}
+
+enum Disposition {
+  DISCHARGE
+  ADMIT_WARD
+  ADMIT_ICU
+  REFERRAL
+  FOLLOW_UP
+}
+
+enum CodeSystem {
+  ICD10CM
+  CPT
+  SNOMEDCT
+}
+
+enum NoteStatus {
+  DRAFT
+  EDITED
+  SIGNED
+}
+
+model User {
+  id         String      @id @default(cuid())
+  name       String
+  email      String      @unique
+  role       Role        @default(CLINICIAN)
+  encounters Encounter[]
+  createdAt  DateTime    @default(now())
+}
+
+model Patient {
+  id         String      @id @default(cuid())
+  mrn        String      @unique          // synthetic medical record number
+  firstName  String
+  lastName   String
+  dob        DateTime
+  sex        String
+  encounters Encounter[]
+  createdAt  DateTime    @default(now())
+}
+
+model Encounter {
+  id              String          @id @default(cuid())
+  patient         Patient         @relation(fields: [patientId], references: [id])
+  patientId       String
+  clinician       User            @relation(fields: [clinicianId], references: [id])
+  clinicianId     String
+  status          EncounterStatus @default(CHECKED_IN)
+  department      String          @default("OUTPATIENT") // ED, OUTPATIENT, ICU...
+  chiefComplaint  String?
+
+  // Timestamps that feed the digital twin
+  checkInAt       DateTime        @default(now())
+  examStartAt     DateTime?
+  examEndAt       DateTime?
+  signedAt        DateTime?
+  syncedAt        DateTime?
+
+  // AI-predicted operational metadata (Module A → Module B bridge)
+  predictedDisposition Disposition?
+  dispositionConfidence Float?     // 0..1, e.g. 0.75 ICU likelihood
+  orderedLabs     String[]         @default([])
+  orderedImaging  String[]         @default([])
+
+  transcript      Transcript?
+  note            ClinicalNote?
+  ehrSyncLogs     EhrSyncLog[]
+  createdAt       DateTime        @default(now())
+
+  @@index([status, department])
+  @@index([checkInAt])
+}
+
+model Transcript {
+  id          String    @id @default(cuid())
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  encounterId String    @unique
+  rawText     String    @db.Text
+  speakers    Json?     // diarized segments if using Deepgram
+  durationSec Int?
+  audioDeleted Boolean  @default(true) // PRD: delete audio post-transcription
+  createdAt   DateTime  @default(now())
+}
+
+model ClinicalNote {
+  id          String     @id @default(cuid())
+  encounter   Encounter  @relation(fields: [encounterId], references: [id])
+  encounterId String     @unique
+  status      NoteStatus @default(DRAFT)
+
+  subjective  String     @db.Text
+  objective   String     @db.Text
+  assessment  String     @db.Text
+  plan        String     @db.Text
+
+  aiModel     String?    // which model generated it
+  generationMs Int?      // PRD latency KPI
+  editedFields String[]  @default([]) // track what clinician changed (accuracy KPI)
+
+  codes       CodeSuggestion[]
+  signedById  String?
+  signedAt    DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model CodeSuggestion {
+  id          String       @id @default(cuid())
+  note        ClinicalNote @relation(fields: [noteId], references: [id])
+  noteId      String
+  system      CodeSystem
+  code        String       // e.g. "J06.9"
+  description String
+  confidence  Float        // 0..1
+  accepted    Boolean      @default(true) // clinician can reject
+
+  @@index([noteId])
+}
+
+model EhrSyncLog {
+  id          String    @id @default(cuid())
+  encounter   Encounter @relation(fields: [encounterId], references: [id])
+  encounterId String
+  fhirBundle  Json      // the generated (mock) FHIR bundle
+  latencyMs   Int       // PRD KPI: sync latency
+  success     Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+}
+
+model SimulationRun {
+  id          String   @id @default(cuid())
+  name        String
+  // Scenario knobs (the what-if inputs)
+  config      Json     // { edNurses: 5, outpatientNurses: 8, beds: 20, arrivalRatePerHr: 12, ... }
+  // Outputs
+  results     Json     // { avgWaitMin, p90WaitMin, bedUtilization, throughput, timeline: [...] }
+  baselineId  String?  // compare against a baseline run
+  createdAt   DateTime @default(now())
 }
