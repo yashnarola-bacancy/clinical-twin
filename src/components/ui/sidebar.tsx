@@ -2,9 +2,15 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Activity, ClipboardList, Mic } from 'lucide-react'
+import { Activity, ClipboardList, Mic, LayoutDashboard } from 'lucide-react'
 
 const NAV_SECTIONS = [
+  {
+    label: 'Overview',
+    items: [
+      { href: '/', label: 'Dashboard', Icon: LayoutDashboard },
+    ],
+  },
   {
     label: 'Clinician',
     items: [

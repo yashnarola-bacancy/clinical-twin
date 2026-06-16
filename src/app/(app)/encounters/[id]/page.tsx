@@ -6,6 +6,7 @@ import { db } from '@/lib/db'
 import { fmtTime, diffMin, ageFromDob, DISPOSITION_LABELS } from '@/lib/fmt'
 import { StatusBadge, DeptBadge } from '@/components/encounters/badges'
 import NoteReview from '@/components/encounters/note-review'
+import EhrSync from '@/components/encounters/ehr-sync'
 
 // ---------------------------------------------------------------------------
 // Metadata
@@ -238,6 +239,16 @@ export default async function EncounterDetailPage({ params }: Props) {
             </p>
           </div>
         </div>
+      )}
+
+      {/* ── EHR sync (only once the note is signed) ─────────────────── */}
+      {enc.note?.status === 'SIGNED' && (
+        <EhrSync
+          encounterId={enc.id}
+          initialSynced={enc.status === 'SYNCED'}
+          syncedAt={enc.syncedAt?.toISOString() ?? null}
+          latencyMs={syncLog?.latencyMs ?? null}
+        />
       )}
     </div>
   )
