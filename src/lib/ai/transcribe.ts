@@ -3,7 +3,7 @@ import OpenAI from "openai";
 // Returned when MOCK_AI=true — matches the sinusitis mock note in claude.ts
 const MOCK_TRANSCRIPT = `
 Dr. Patel: Good afternoon. What brings you in today?
-Patient (James Whitmore, MRN SYNTH-001): I've had terrible congestion for about two weeks now. My face hurts — especially around my cheeks and forehead — and I've had a low-grade fever.
+Patient: I've had terrible congestion for about two weeks now. My face hurts — especially around my cheeks and forehead — and I've had a low-grade fever.
 Dr. Patel: Any nasal discharge? What color?
 Patient: Yes, thick yellow-green stuff. My sense of smell is almost gone.
 Dr. Patel: Any tooth pain or ear pain?

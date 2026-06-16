@@ -6,7 +6,7 @@ const client = new Anthropic();
 // Returned when MOCK_AI=true — sinusitis outpatient, discharge-home
 const MOCK_NOTE: SoapNote = {
   subjective:
-    "Patient James Whitmore (SYNTH-001) presents with two weeks of nasal congestion, facial pressure over bilateral cheeks and forehead, low-grade fever, thick yellow-green nasal discharge, reduced sense of smell, and left upper tooth pain. Allergic to penicillin (hives). Takes a daily multivitamin.",
+    "The patient presents with two weeks of nasal congestion, facial pressure over bilateral cheeks and forehead, low-grade fever, thick yellow-green nasal discharge, reduced sense of smell, and left upper tooth pain. Allergic to penicillin (hives). Takes a daily multivitamin.",
   objective:
     "Temperature 98.6°F. Bilateral maxillary sinus tenderness to palpation. Turbinate edema noted. Purulent posterior nasal drainage. No cervical adenopathy. Lungs clear to auscultation bilaterally.",
   assessment:
