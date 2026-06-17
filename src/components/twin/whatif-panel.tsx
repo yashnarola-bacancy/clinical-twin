@@ -125,7 +125,7 @@ export default function WhatIfPanel({
           ) : (
             <Play className="h-3.5 w-3.5" />
           )}
-          Run scenario
+          {running ? 'Simulating…' : 'Run scenario'}
         </button>
 
         <button

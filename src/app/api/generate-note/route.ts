@@ -131,7 +131,7 @@ export async function POST(
         where:   { id: upserted.id },
         include: { codes: { orderBy: { confidence: "desc" } } },
       });
-    });
+    }, { maxWait: 10_000, timeout: 20_000 }); // generous: remote/serverless DB can be slow to wake
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to save note";
     return NextResponse.json({ ok: false, error: message }, { status: 503 });

@@ -93,7 +93,7 @@ export async function POST(
         where:   { id: noteId },
         include: { codes: { orderBy: { confidence: "desc" } } },
       });
-    });
+    }, { maxWait: 10_000, timeout: 20_000 }); // generous: remote/serverless DB can be slow to wake
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Failed to sign note";
     return NextResponse.json({ ok: false, error: msg }, { status: 503 });

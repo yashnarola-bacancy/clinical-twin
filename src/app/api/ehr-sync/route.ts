@@ -112,7 +112,7 @@ export async function POST(
         where: { id: encounterId },
         data: { status: EncounterStatus.SYNCED, syncedAt: new Date() },
       });
-    });
+    }, { maxWait: 10_000, timeout: 20_000 }); // generous: remote/serverless DB can be slow to wake
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to record EHR sync";
     return NextResponse.json({ ok: false, error: message }, { status: 503 });

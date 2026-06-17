@@ -216,17 +216,34 @@ export default function RecordPanel({ encounters }: { encounters: EncounterOptio
         {/* ── Idle ── */}
         {stage === 'idle' && (
           <div className="flex flex-col items-center gap-5">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
-              <Mic className="h-7 w-7 text-slate-400" />
-            </div>
-            <p className="text-sm text-slate-500">Ready to record</p>
-            <button
-              onClick={startRecording}
-              disabled={!encounterId}
-              className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              Start Recording
-            </button>
+            {encounters.length === 0 ? (
+              <>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
+                  <Mic className="h-7 w-7 text-slate-300" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-slate-700">No active encounters</p>
+                  <p className="mt-1.5 max-w-xs text-xs leading-relaxed text-slate-500">
+                    There are no checked-in patients to document yet. Seed the demo database to
+                    add encounters, then refresh this page.
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-100">
+                  <Mic className="h-7 w-7 text-slate-400" />
+                </div>
+                <p className="text-sm text-slate-500">Ready to record</p>
+                <button
+                  onClick={startRecording}
+                  disabled={!encounterId}
+                  className="rounded-lg bg-slate-900 px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Start Recording
+                </button>
+              </>
+            )}
           </div>
         )}
 

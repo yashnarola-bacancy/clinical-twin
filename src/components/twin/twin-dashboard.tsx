@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Clock, Hourglass, Gauge, Users } from 'lucide-react'
+import { Clock, Hourglass, Gauge, Users, AlertTriangle, RotateCcw } from 'lucide-react'
 import { StatCard } from '@/components/dashboard/stat-card'
 import TimelineChart from '@/components/twin/timeline-chart'
 import FloorView from '@/components/twin/floor-view'
@@ -29,12 +29,15 @@ export default function TwinDashboard() {
   const [status, setStatus] = useState<Status>('loading')
   const [results, setResults] = useState<SimResults | null>(null)
   const [error, setError] = useState<string>('')
+  // Bumped by the retry button to re-run the baseline simulation.
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     let cancelled = false
 
     async function run() {
       setStatus('loading')
+      setError('')
       try {
         const res = await fetch('/api/simulate', {
           method: 'POST',
@@ -61,10 +64,10 @@ export default function TwinDashboard() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reloadKey])
 
   if (status === 'loading') return <LoadingState />
-  if (status === 'error') return <ErrorState message={error} />
+  if (status === 'error') return <ErrorState message={error} onRetry={() => setReloadKey(k => k + 1)} />
   if (!results) return null
 
   return (
@@ -167,11 +170,21 @@ function LoadingState() {
   )
 }
 
-function ErrorState({ message }: { message: string }) {
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-200 bg-white py-20 text-center">
+      <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 ring-1 ring-red-100">
+        <AlertTriangle className="h-6 w-6 text-red-400" strokeWidth={1.75} />
+      </div>
       <p className="text-sm font-medium text-slate-700">Simulation failed to run</p>
       <p className="mt-1 max-w-sm text-xs text-slate-400">{message}</p>
+      <button
+        onClick={onRetry}
+        className="mt-5 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition-colors hover:bg-slate-50"
+      >
+        <RotateCcw className="h-3.5 w-3.5" />
+        Try again
+      </button>
     </div>
   )
 }

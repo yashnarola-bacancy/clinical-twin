@@ -1,12 +1,15 @@
-import { db } from '@/lib/db'
+import Link from 'next/link'
+import { ClipboardList } from 'lucide-react'
+import { db, withDbRetry } from '@/lib/db'
 import { fmtCheckIn, DISPOSITION_LABELS } from '@/lib/fmt'
 import { StatusBadge, DeptBadge } from '@/components/encounters/badges'
 import { EncounterRow } from '@/components/encounters/encounter-row'
+import { EmptyState } from '@/components/ui/empty-state'
 
 export const metadata = { title: 'Encounters — Clinical Twin' }
 
 export default async function EncountersPage() {
-  const encounters = await db.encounter.findMany({
+  const encounters = await withDbRetry(() => db.encounter.findMany({
     select: {
       id:                   true,
       status:               true,
@@ -20,7 +23,7 @@ export default async function EncountersPage() {
       },
     },
     orderBy: { checkInAt: 'desc' },
-  })
+  }))
 
   return (
     <div className="p-8">
@@ -33,6 +36,21 @@ export default async function EncountersPage() {
       </div>
 
       {/* Table */}
+      {encounters.length === 0 ? (
+        <EmptyState
+          Icon={ClipboardList}
+          title="No encounters yet"
+          description="Encounters appear here once patients are checked in. Seed the demo database or record a visit to get started."
+          action={
+            <Link
+              href="/record"
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700"
+            >
+              Record a visit
+            </Link>
+          }
+        />
+      ) : (
       <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead>
@@ -108,6 +126,7 @@ export default async function EncountersPage() {
           </tbody>
         </table>
       </div>
+      )}
     </div>
   )
 }

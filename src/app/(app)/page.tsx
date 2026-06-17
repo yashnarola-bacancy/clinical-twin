@@ -1,10 +1,12 @@
+import Link from 'next/link'
 import { format } from 'date-fns'
 import { Clock, FileCheck2, Timer, ClipboardList } from 'lucide-react'
-import { db } from '@/lib/db'
+import { db, withDbRetry } from '@/lib/db'
 import { StatCard } from '@/components/dashboard/stat-card'
+import { EmptyState } from '@/components/ui/empty-state'
 import NotesChart, { type DayDatum } from '@/components/dashboard/notes-chart'
 
-export const metadata = { title: 'Dashboard — Clinical Twin' }
+export const metadata = { title: 'Quality & compliance — Clinical Twin' }
 
 // Status display order + dot color for the "Encounters processed" breakdown.
 const STATUS_META: { key: string; label: string; dot: string }[] = [
@@ -27,17 +29,19 @@ export default async function DashboardPage() {
   windowStart.setDate(base.getDate() - 13)
 
   const [genAgg, signedTotal, signedClean, syncAgg, statusGroups, signedNotes] =
-    await Promise.all([
-      db.clinicalNote.aggregate({ _avg: { generationMs: true } }),
-      db.clinicalNote.count({ where: { status: 'SIGNED' } }),
-      db.clinicalNote.count({ where: { status: 'SIGNED', editedFields: { isEmpty: true } } }),
-      db.ehrSyncLog.aggregate({ _avg: { latencyMs: true } }),
-      db.encounter.groupBy({ by: ['status'], _count: { _all: true } }),
-      db.clinicalNote.findMany({
-        where: { signedAt: { gte: windowStart } },
-        select: { signedAt: true },
-      }),
-    ])
+    await withDbRetry(() =>
+      Promise.all([
+        db.clinicalNote.aggregate({ _avg: { generationMs: true } }),
+        db.clinicalNote.count({ where: { status: 'SIGNED' } }),
+        db.clinicalNote.count({ where: { status: 'SIGNED', editedFields: { isEmpty: true } } }),
+        db.ehrSyncLog.aggregate({ _avg: { latencyMs: true } }),
+        db.encounter.groupBy({ by: ['status'], _count: { _all: true } }),
+        db.clinicalNote.findMany({
+          where: { signedAt: { gte: windowStart } },
+          select: { signedAt: true },
+        }),
+      ]),
+    )
 
   // ── KPI 1: avg note generation time (seconds, target < 60s) ───────
   const avgGenMs = genAgg._avg.generationMs
@@ -84,12 +88,30 @@ export default async function DashboardPage() {
     <div className="mx-auto max-w-6xl p-8">
       {/* Page header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Dashboard</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          Quality &amp; compliance
+        </h1>
         <p className="mt-1 text-sm text-slate-500">
-          Success metrics from the PRD, computed from live encounter data.
+          Documentation accuracy &amp; throughput KPIs, computed from live encounter data.
         </p>
       </div>
 
+      {totalEncounters === 0 ? (
+        <EmptyState
+          Icon={ClipboardList}
+          title="No encounters yet"
+          description="KPIs populate as visits are recorded, signed, and synced to the EHR. Record your first visit to see metrics here."
+          action={
+            <Link
+              href="/record"
+              className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-slate-700"
+            >
+              Record a visit
+            </Link>
+          }
+        />
+      ) : (
+        <>
       {/* KPI cards */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
@@ -140,6 +162,8 @@ export default async function DashboardPage() {
         </div>
         <NotesChart data={chartData} />
       </div>
+        </>
+      )}
     </div>
   )
 }

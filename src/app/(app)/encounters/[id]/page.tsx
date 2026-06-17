@@ -2,7 +2,7 @@ import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
-import { db } from '@/lib/db'
+import { db, withDbRetry } from '@/lib/db'
 import { fmtTime, diffMin, ageFromDob, DISPOSITION_LABELS } from '@/lib/fmt'
 import { StatusBadge, DeptBadge } from '@/components/encounters/badges'
 import NoteReview from '@/components/encounters/note-review'
@@ -32,7 +32,7 @@ export default async function EncounterDetailPage({ params }: Props) {
   const { id } = await params
 
   const [enc, cookieStore] = await Promise.all([
-    db.encounter.findUnique({
+    withDbRetry(() => db.encounter.findUnique({
       where: { id },
       include: {
         patient:   true,
@@ -47,7 +47,7 @@ export default async function EncounterDetailPage({ params }: Props) {
           take: 1,
         },
       },
-    }),
+    })),
     cookies(),
   ])
 
