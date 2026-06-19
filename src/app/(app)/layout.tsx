@@ -32,9 +32,6 @@ export default async function AppLayout({
                 {persona.label} view
               </span>
             )}
-            <span className="rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-600 ring-1 ring-inset ring-amber-200">
-              Demo
-            </span>
           </div>
 
           <UserMenu name={activeUser.name ?? activeUser.email ?? 'User'} role={activeUser.role} />
