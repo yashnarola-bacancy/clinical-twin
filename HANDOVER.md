@@ -19,7 +19,8 @@ run it, what it is (and isn't), and the few things worth knowing before a demo.
 
 > ⚠️ **This is a demo, not production healthcare software.** All patients and clinical
 > content are synthetic. See the "Production roadmap / what's mocked" table in `README.md`
-> for an honest accounting of what's stubbed (EHR/FHIR, HIPAA/audit, authentication).
+> for an honest accounting of what's stubbed (EHR/FHIR, HIPAA/audit). Authentication is
+> real — login/signup via Auth.js (NextAuth v5) with credentials stored in Postgres.
 
 ---
 
@@ -39,7 +40,9 @@ cd clinical-twin
 
 # 1. Create your environment file from the template
 Copy-Item .env.example .env
-#    Then edit .env and set DATABASE_URL to your PostgreSQL connection string.
+#    Then edit .env and set:
+#      DATABASE_URL  -> your PostgreSQL connection string
+#      AUTH_SECRET   -> a random string (generate with: openssl rand -base64 32)
 #    Leave MOCK_AI="true" to run without any AI keys.
 
 # 2. Install dependencies
@@ -55,6 +58,9 @@ npm run dev                 # http://localhost:3000
 
 > On macOS/Linux use `cp .env.example .env` instead of `Copy-Item`.
 
+> The app requires login: the first load redirects to **`/login`**. Sign in with a seeded
+> demo account (all share the password `password123`) or create a new one at **`/signup`**.
+
 ---
 
 ## Environment variables (`.env`)
@@ -65,7 +71,7 @@ npm run dev                 # http://localhost:3000
 | `MOCK_AI` | Recommended | `"true"` = no AI keys needed (canned responses). `"false"` = use real Whisper + Claude. |
 | `ANTHROPIC_API_KEY` | Only if `MOCK_AI="false"` | For live SOAP-note generation (Claude). |
 | `OPENAI_API_KEY` | Only if `MOCK_AI="false"` | For live transcription (Whisper). |
-| `NEXTAUTH_SECRET` | Yes | Any random string. |
+| `AUTH_SECRET` | **Yes** | Auth.js session secret. Generate with `openssl rand -base64 32`. |
 
 ---
 
@@ -84,11 +90,19 @@ two API keys to exercise the real models.
 ## Re-seeding the demo data
 
 The seed is **idempotent** — it wipes and reloads ~30 patients, ~60 encounters over 14
-days, 3 users (one per role), plus signed "showcase" encounters so the dashboard and twin
-have data immediately.
+days, 3 login users (one per role), plus signed "showcase" encounters so the dashboard and
+twin have data immediately.
 
-- From the command line: `npx prisma db seed`
-- From inside the app: open **`/settings`** and use the reset & re-seed control.
+The three seeded users all share the password **`password123`**:
+
+| Email | Role |
+|---|---|
+| `sarah.chen@clinicaltwin.dev` | Clinician |
+| `marcus.williams@clinicaltwin.dev` | Operations Director |
+| `priya.patel@clinicaltwin.dev` | CMIO |
+
+- From the command line: `npx prisma db seed` (prints the login emails + password at the end)
+- From inside the app: open **`/settings`** and use the reset & re-seed control (CMIO only).
 
 ---
 
@@ -110,8 +124,11 @@ have data immediately.
 
 ## Good to know for a demo
 
-- **Three roles** (Clinician, Operations Director, CMIO) switch via the header dropdown.
-  This is a demo cookie, **not real authentication**.
+- **Real authentication** (Auth.js / NextAuth v5). You log in as one of the three seeded
+  users; the **role comes from the account**, and you sign out from the header. To switch
+  personas (Clinician, Operations Director, CMIO), sign out and sign back in as that user.
+- **Role-based access** is enforced by middleware: `/twin` is Operations Director + CMIO,
+  and `/settings` (re-seed) is CMIO only — other logged-in users see a "not authorized" page.
 - There's an internal **presenter walkthrough at `/demo-guide`** (not shown in the product
   nav) that's handy for running a demo.
 - A note must be **signed** before it can sync to the EHR or feed the simulation.

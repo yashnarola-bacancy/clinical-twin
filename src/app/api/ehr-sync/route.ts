@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "../../../../auth";
 import { db } from "@/lib/db";
 import { EncounterStatus, NoteStatus, Prisma } from "@prisma/client";
 import { buildFhirBundle, type FhirBundle } from "@/lib/fhir/bundle";
@@ -23,6 +24,12 @@ function sleep(ms: number): Promise<void> {
 export async function POST(
   req: NextRequest
 ): Promise<NextResponse<ApiResponse<SyncData>>> {
+  // ── Require an authenticated user ─────────────────────────────────
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
+  }
+
   // ── Parse body ────────────────────────────────────────────────────
   let body: unknown;
   try {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "../../../../auth";
 import { db } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { runSimulation } from "@/lib/simulation/engine";
@@ -38,6 +39,12 @@ const RequestSchema = ConfigSchema.extend({
 export async function POST(
   req: NextRequest
 ): Promise<NextResponse<ApiResponse<SimResults>>> {
+  // ── Require an authenticated user ─────────────────────────────────
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();

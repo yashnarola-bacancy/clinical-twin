@@ -56,11 +56,9 @@ function fmtSignedAt(iso: string): string {
 export default function NoteReview({
   note,
   encounterId,
-  clinicianId,
 }: {
   note:        SerializedNote
   encounterId: string
-  clinicianId: string | null
 }) {
   const router = useRouter()
 
@@ -109,7 +107,6 @@ export default function NoteReview({
         body: JSON.stringify({
           noteId:      note.id,
           encounterId,
-          signedById:  clinicianId,
           fields,
           editedFields,
           acceptedCodeIds,

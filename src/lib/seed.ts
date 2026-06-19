@@ -6,7 +6,20 @@ import {
   CodeSystem,
   NoteStatus,
   type Patient,
+  type User,
 } from '@prisma/client'
+import bcrypt from 'bcryptjs'
+
+// Shared demo login: every seeded user gets the same known password so the
+// demo is easy to sign into. Synthetic accounts only — never a real credential.
+export const DEMO_PASSWORD = 'password123'
+
+/** The login accounts the seeder creates, one per role. */
+export const SEED_USERS = [
+  { name: 'Dr. Sarah Chen',  email: 'sarah.chen@clinicaltwin.dev',      role: Role.CLINICIAN },
+  { name: 'Marcus Williams', email: 'marcus.williams@clinicaltwin.dev', role: Role.OPS_DIRECTOR },
+  { name: 'Dr. Priya Patel', email: 'priya.patel@clinicaltwin.dev',     role: Role.CMIO },
+] as const
 
 // ---------------------------------------------------------------------------
 // Shared synthetic-data seeder.
@@ -433,16 +446,17 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
   await prisma.user.deleteMany()
 
   // Users — one per role. Created sequentially to stay within the connection
-  // limits of serverless Postgres (a wide Promise.all can exhaust them).
-  const clinician = await prisma.user.create({
-    data: { name: 'Dr. Sarah Chen', email: 'sarah.chen@clinicaltwin.dev', role: Role.CLINICIAN },
-  })
-  await prisma.user.create({
-    data: { name: 'Marcus Williams', email: 'marcus.williams@clinicaltwin.dev', role: Role.OPS_DIRECTOR },
-  })
-  await prisma.user.create({
-    data: { name: 'Dr. Priya Patel', email: 'priya.patel@clinicaltwin.dev', role: Role.CMIO },
-  })
+  // limits of serverless Postgres (a wide Promise.all can exhaust them). Every
+  // user shares the same bcrypt-hashed demo password for Credentials login.
+  const hashedPassword = await bcrypt.hash(DEMO_PASSWORD, 10)
+  let clinician: User | undefined
+  for (const u of SEED_USERS) {
+    const created = await prisma.user.create({
+      data: { name: u.name, email: u.email, role: u.role, hashedPassword },
+    })
+    if (u.role === Role.CLINICIAN) clinician = created
+  }
+  if (!clinician) throw new Error('Seed expected a CLINICIAN user in SEED_USERS')
 
   // Patients — 30 with varied ages, realistic fictional names (sequential).
   const patients: Patient[] = []
@@ -466,7 +480,7 @@ export async function seedDatabase(prisma: PrismaClient): Promise<SeedSummary> {
   }
 
   const summary: SeedSummary = {
-    users:       3,
+    users:       SEED_USERS.length,
     patients:    patients.length,
     encounters:  0,
     transcripts: 0,

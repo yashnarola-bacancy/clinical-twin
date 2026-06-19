@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "../../../../auth";
 import { db } from "@/lib/db";
 import { NoteStatus, EncounterStatus, Prisma } from "@prisma/client";
 
@@ -9,7 +10,6 @@ type ApiResponse<T> = { ok: true; data: T } | { ok: false; error: string };
 const RequestSchema = z.object({
   noteId:          z.string().min(1),
   encounterId:     z.string().min(1),
-  signedById:      z.string().nullable().optional(),
   fields: z.object({
     subjective: z.string(),
     objective:  z.string(),
@@ -23,6 +23,12 @@ const RequestSchema = z.object({
 export async function POST(
   req: NextRequest
 ): Promise<NextResponse<ApiResponse<SavedNote>>> {
+  // ── Require an authenticated user; they become the signer ─────────
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -38,7 +44,8 @@ export async function POST(
     );
   }
 
-  const { noteId, encounterId, signedById, fields, editedFields, acceptedCodeIds } = v.data;
+  const { noteId, encounterId, fields, editedFields, acceptedCodeIds } = v.data;
+  const signedById = session.user.id;
 
   // ── Guard: note must exist and not be signed yet ──────────────────
   let existing: { status: NoteStatus } | null;
@@ -70,7 +77,7 @@ export async function POST(
           ...fields,
           status:       NoteStatus.SIGNED,
           editedFields,
-          signedById:   signedById ?? null,
+          signedById,
           signedAt:     now,
         },
       });

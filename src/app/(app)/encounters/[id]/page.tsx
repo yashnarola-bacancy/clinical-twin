@@ -1,4 +1,3 @@
-import { cookies } from 'next/headers'
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
@@ -31,25 +30,22 @@ export async function generateMetadata({ params }: Props) {
 export default async function EncounterDetailPage({ params }: Props) {
   const { id } = await params
 
-  const [enc, cookieStore] = await Promise.all([
-    withDbRetry(() => db.encounter.findUnique({
-      where: { id },
-      include: {
-        patient:   true,
-        clinician: { select: { name: true, role: true } },
-        note: {
-          include: { codes: { orderBy: { confidence: 'desc' } } },
-        },
-        transcript:  { select: { durationSec: true } },
-        ehrSyncLogs: {
-          select:  { latencyMs: true, success: true, createdAt: true },
-          orderBy: { createdAt: 'desc' },
-          take: 1,
-        },
+  const enc = await withDbRetry(() => db.encounter.findUnique({
+    where: { id },
+    include: {
+      patient:   true,
+      clinician: { select: { name: true, role: true } },
+      note: {
+        include: { codes: { orderBy: { confidence: 'desc' } } },
       },
-    })),
-    cookies(),
-  ])
+      transcript:  { select: { durationSec: true } },
+      ehrSyncLogs: {
+        select:  { latencyMs: true, success: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+        take: 1,
+      },
+    },
+  }))
 
   if (!enc) notFound()
 
@@ -58,7 +54,6 @@ export default async function EncounterDetailPage({ params }: Props) {
   const dob      = enc.patient.dob.toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
   })
-  const clinicianId = cookieStore.get('activeUserId')?.value ?? null
 
   return (
     <div className="mx-auto max-w-4xl p-8">
@@ -225,7 +220,6 @@ export default async function EncounterDetailPage({ params }: Props) {
             })),
           }}
           encounterId={enc.id}
-          clinicianId={clinicianId}
         />
       ) : (
         <div className="rounded-xl border border-slate-100 bg-white">

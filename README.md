@@ -105,8 +105,8 @@ MOCK_AI=true
 ANTHROPIC_API_KEY="sk-ant-..."
 OPENAI_API_KEY="sk-..."
 
-# App
-NEXTAUTH_SECRET="any-random-string"
+# App — Auth.js session secret (generate with: openssl rand -base64 32)
+AUTH_SECRET="..."
 ```
 
 ### 3. Mock mode (no API keys required)
@@ -127,16 +127,27 @@ npx prisma migrate dev      # apply schema / create tables
 npx prisma db seed          # clear + load fresh synthetic data
 ```
 
-The seed **clears all data and reseeds** (idempotent, FK-safe), producing 3 users (one per
-role), ~30 patients, and ~60 encounters across 14 days — including a few hand-written,
+The seed **clears all data and reseeds** (idempotent, FK-safe), producing 3 login users (one
+per role), ~30 patients, and ~60 encounters across 14 days — including a few hand-written,
 fully-signed "showcase" encounters so the KPIs and twin have data immediately. You can also
-re-seed from inside the app at **`/settings`**.
+re-seed from inside the app at **`/settings`** (CMIO only).
+
+The three seeded users all share the password **`password123`**:
+
+| Email | Role |
+|---|---|
+| `sarah.chen@clinicaltwin.dev` | Clinician |
+| `marcus.williams@clinicaltwin.dev` | Operations Director |
+| `priya.patel@clinicaltwin.dev` | CMIO |
 
 ### 5. Dev server
 
 ```bash
 npm run dev                 # http://localhost:3000
 ```
+
+The app requires login — the first load redirects to **`/login`**. Sign in with a seeded
+account above, or create a new one at **`/signup`**.
 
 ### Other commands
 
@@ -153,19 +164,25 @@ npx prisma studio           # browse the database
 ## Architecture overview
 
 ```
+auth.ts                     # Auth.js full config (Node): Prisma adapter + Credentials provider
+auth.config.ts              # edge-safe Auth.js config (shared by auth.ts + middleware)
 src/
+├─ middleware.ts            # route protection: public /login /signup, else require session; role gates
 ├─ app/
-│  ├─ (app)/                 # product shell (sidebar + header + role switcher)
+│  ├─ (auth)/                # unauthenticated pages (no app chrome): login, signup
+│  ├─ (app)/                 # product shell (sidebar + header + user menu) — requires a session
 │  │  ├─ page.tsx            # "/"            KPI dashboard (Quality & compliance — CMIO)
 │  │  ├─ record/             # "/record"      capture a visit (Clinician)
 │  │  ├─ encounters/         # "/encounters"  list + [id] detail / review / sign-off / sync
-│  │  ├─ twin/               # "/twin"        operational digital twin (Ops Director)
-│  │  ├─ settings/           # "/settings"    admin: reset & re-seed demo data
+│  │  ├─ twin/               # "/twin"        operational digital twin (Ops Director + CMIO)
+│  │  ├─ settings/           # "/settings"    admin: reset & re-seed demo data (CMIO only)
 │  │  ├─ loading.tsx · error.tsx · not-found.tsx   # app-wide state fallbacks
 │  │  └─ layout.tsx
+│  ├─ not-authorized/        # "/not-authorized"  shown when a logged-in user lacks the role
 │  ├─ demo-guide/            # "/demo-guide"  INTERNAL presenter walkthrough (not in product nav)
-│  └─ api/                   # transcribe · generate-note · sign-off · ehr-sync · simulate
-├─ components/               # colocated per feature: dashboard / encounters / twin / ui
+│  └─ api/                   # auth/[...nextauth] · auth/signup · transcribe · generate-note · sign-off · ehr-sync · simulate
+├─ components/               # colocated per feature: dashboard / encounters / twin / ui (incl. user-menu)
+├─ types/                    # next-auth.d.ts — session/JWT carry user.id + user.role
 └─ lib/
    ├─ db.ts                  # Prisma singleton — all DB access goes through here
    ├─ ai/                    # claude.ts · transcribe.ts · soap-prompt.ts (Zod schema + prompt)
@@ -184,9 +201,13 @@ src/
 - The simulation engine is a **pure function** — testable and rerunnable from UI sliders, with
   no DB/fetch/clock inside it.
 
-**Roles & personas** — three roles (Clinician, Operations Director, CMIO) selectable via the
-header role switcher. Each persona lands on its primary surface and the relevant nav is
-emphasized. Role state is stored in a cookie (demo convenience; **not** real authentication).
+**Authentication & roles** — real auth via **Auth.js (NextAuth v5)**: a Credentials provider
+(email + password, bcrypt-hashed) backed by the Prisma adapter, with a JWT session that
+carries `user.id` and `user.role`. The current user comes from `auth()` (never a cookie);
+`src/middleware.ts` enforces route protection (public `/login` + `/signup`, everything else
+requires a session) and role gating (`/twin` → Ops Director + CMIO, `/settings` → CMIO).
+Each of the three personas (Clinician, Operations Director, CMIO) lands on its primary
+surface with the relevant nav emphasized, driven by `session.user.role`.
 
 **Key domain rules (enforced in the demo)**
 
@@ -207,9 +228,9 @@ thing runs on a laptop. Here's an honest accounting of what would change for pro
 |------|--------------|----------------|
 | **Whisper / Claude calls** | Stubbed behind `MOCK_AI=true` (canned transcript + note). | Flip `MOCK_AI=false` and supply API keys — the real Whisper + Claude code paths already exist (`src/lib/ai/`). Production also needs prompt hardening, output guardrails, model/version pinning, cost controls, retries/timeouts, and a BAA with the model providers. |
 | **EHR integration (FHIR)** | A FHIR transaction Bundle is constructed and written to an `EhrSyncLog` with a measured/simulated latency. **No external EHR is contacted.** | Real **Epic / Cerner (Oracle Health) integration** via their FHIR APIs and write-back workflows. This requires a **vendor partnership / app-orchestration agreement**, SMART-on-FHIR launch & OAuth2, sandbox certification, and per-site configuration. |
-| **HIPAA compliance & audit logging** | None. No PHI (synthetic data only), no audit trail, no access controls beyond a demo cookie. | Full HIPAA program: encryption in transit and at rest, signed **BAAs** with every subprocessor, immutable **audit logging** of every read/write/sign-off/sync, data retention & breach policies, and likely SOC 2. |
+| **HIPAA compliance & audit logging** | No PHI (synthetic data only) and no audit trail. Access control is basic: real login (Auth.js) with middleware route + role gating, but no immutable audit logging. | Full HIPAA program: encryption in transit and at rest, signed **BAAs** with every subprocessor, immutable **audit logging** of every read/write/sign-off/sync, data retention & breach policies, and likely SOC 2. |
 | **Speaker diarization / capture hardware** | Single-channel browser `MediaRecorder`; the transcript is not reliably attributed by speaker. | Clinical-grade **ambient capture hardware** and/or diarization models to separate clinician vs. patient, handle multi-party rooms, noise, and overlapping speech, with consent capture. |
-| **Security hardening** | Demo-grade only: cookie-based role switching (not auth), no rate limiting, no secret rotation, no input fuzzing/abuse protection. | Real **authentication & authorization** (SSO/SAML/OIDC, RBAC), session management, rate limiting, secrets management, dependency/SAST/DAST scanning, pen testing, and infrastructure hardening. |
+| **Security hardening** | Real login (Auth.js credentials) with JWT sessions and middleware route/role gating, but otherwise demo-grade: no SSO, no rate limiting, no secret rotation, no input fuzzing/abuse protection. | Enterprise **authentication & authorization** (SSO/SAML/OIDC, full RBAC), session management, rate limiting, secrets management, dependency/SAST/DAST scanning, pen testing, and infrastructure hardening. |
 
 **Also out of scope for the demo:** multi-tenant org/clinic separation, billing/coding
 compliance review, clinical safety validation and regulatory clearance, real-time EHR

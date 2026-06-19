@@ -1,6 +1,6 @@
 import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
-import { seedDatabase } from '../src/lib/seed'
+import { seedDatabase, SEED_USERS, DEMO_PASSWORD } from '../src/lib/seed'
 
 // Thin CLI wrapper around the shared seeder in src/lib/seed.ts. The same logic
 // is reused by the in-app /settings re-seed action (which uses the db singleton).
@@ -18,6 +18,12 @@ async function main() {
   console.log(`   Clinical notes:   ${s.notes}`)
   console.log(`   Code suggestions: ${s.codes}`)
   console.log(`   EHR sync logs:    ${s.syncLogs}`)
+
+  console.log('\n🔑 Demo login credentials')
+  console.log(`   Password (all users): ${DEMO_PASSWORD}`)
+  for (const u of SEED_USERS) {
+    console.log(`   ${u.role.padEnd(12)} ${u.email}`)
+  }
 }
 
 main()

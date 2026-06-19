@@ -1,7 +1,7 @@
-import { cookies } from 'next/headers'
-import { db, withDbRetry } from '@/lib/db'
+import { redirect } from 'next/navigation'
+import { auth } from '../../../auth'
 import Sidebar from '@/components/ui/sidebar'
-import RoleSwitcher from '@/components/ui/role-switcher'
+import UserMenu from '@/components/ui/user-menu'
 import { PERSONAS, type PersonaRole } from '@/lib/personas'
 
 export default async function AppLayout({
@@ -9,25 +9,16 @@ export default async function AppLayout({
 }: {
   children: React.ReactNode
 }) {
-  const store = await cookies()
-  const savedId = store.get('activeUserId')?.value
+  // The whole app is identified by the Auth.js session now. No session → login.
+  const session = await auth()
+  if (!session?.user) redirect('/login')
 
-  const users = await withDbRetry(() => db.user.findMany({
-    select: { id: true, name: true, role: true },
-    orderBy: { role: 'asc' },
-  }))
-
-  // Default to the clinician if no cookie is set or the stored id is stale.
-  const activeUser =
-    users.find(u => u.id === savedId) ??
-    users.find(u => u.role === 'CLINICIAN') ??
-    users[0]
-
-  const persona = activeUser ? PERSONAS[activeUser.role as PersonaRole] : null
+  const activeUser = session.user
+  const persona = PERSONAS[activeUser.role as PersonaRole] ?? null
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-50">
-      <Sidebar activeRole={activeUser?.role} />
+      <Sidebar activeRole={activeUser.role} />
 
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Header */}
@@ -46,11 +37,7 @@ export default async function AppLayout({
             </span>
           </div>
 
-          <RoleSwitcher
-            users={users}
-            activeUserId={activeUser?.id ?? ''}
-            activeRole={activeUser?.role}
-          />
+          <UserMenu name={activeUser.name ?? activeUser.email ?? 'User'} role={activeUser.role} />
         </header>
 
         {/* Page content */}

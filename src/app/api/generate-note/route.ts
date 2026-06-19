@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { auth } from "../../../../auth";
 import { db } from "@/lib/db";
 import { generateNote } from "@/lib/ai/claude";
 import { Disposition, CodeSystem, EncounterStatus, NoteStatus, Prisma } from "@prisma/client";
@@ -26,6 +27,12 @@ const DISP_MAP: Partial<Record<string, Disposition>> = {
 export async function POST(
   req: NextRequest
 ): Promise<NextResponse<ApiResponse<SavedNote>>> {
+  // ── Require an authenticated user ─────────────────────────────────
+  const session = await auth();
+  if (!session?.user) {
+    return NextResponse.json({ ok: false, error: "Authentication required" }, { status: 401 });
+  }
+
   // ── Parse body ────────────────────────────────────────────────────
   let body: unknown;
   try {
